@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+node_modules/
+video/out/
+video/public/audio/
+video/public/props.json
+site/_build/
+drafts/*/media/

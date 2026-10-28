@@ -1,0 +1,38 @@
+# إعدادات الإيجنت. غيّر القيم هون بدل ما تعدّل الكود.
+brand:
+  name: "دليل الذكي"
+  handle: "@daleel.ai"
+  tagline: "كل يوم أداة ذكاء اصطناعي بتسهّل شغلك"
+  # بيتعبّى تلقائياً من GitHub Pages. إذا ربطت دومين خاص، حطه هون.
+  site_url: "https://yazanmaharmehai-oss.github.io/daleel-agent"
+
+markets: ["السعودية", "الإمارات", "الكويت", "قطر", "الأردن"]
+
+ai:
+  model: "claude-opus-5-5"
+  max_tokens: 16000
+
+research:
+  # عدد نتائج Tavily لكل بحث
+  max_results: 6
+  # مواقع ما بنعتمد عليها كمصدر للحقائق
+  exclude_domains: ["pinterest.com", "tiktok.com", "facebook.com"]
+
+voice:
+  enabled: true
+  # أصوات Edge TTS العربية: ar-SA-HamedNeural, ar-SA-ZariyahNeural, ar-AE-HamdanNeural, ar-JO-TaimNeural, ar-JO-SanaNeural
+  name: "ar-SA-HamedNeural"
+  rate: "+8%"
+
+video:
+  fps: 30
+  # أقل مدة للمشهد بالثواني لو ما في صوت
+  min_scene_seconds: 2.6
+
+schedule:
+  # كم يوم لازم يمر قبل ما نرجع لنفس المنتج
+  product_cooldown_days: 21
+
+pinterest:
+  enabled: false
+  board_id: ""

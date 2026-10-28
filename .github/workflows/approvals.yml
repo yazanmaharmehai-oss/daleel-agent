@@ -1,0 +1,72 @@
+name: approvals-and-site
+# كل 20 دقيقة: بيقرأ أزرار تيليغرام. إذا وافقت على مسودة، بيبني الموقع وبينشره على GitHub Pages.
+on:
+  schedule:
+    - cron: "*/20 * * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["products.yaml", "config.yaml", "site/static/**", "agent/site.py"]
+
+permissions:
+  contents: write
+  actions: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: daleel-state
+  cancel-in-progress: false
+
+jobs:
+  approvals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      publish: ${{ steps.tg.outputs.publish }}
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      PINTEREST_TOKEN: ${{ secrets.PINTEREST_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - id: tg
+        run: python -m agent approvals
+      - name: Save state
+        run: |
+          git config user.name "daleel-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A state drafts site/content
+          git diff --cached --quiet && exit 0
+          git commit -m "approvals: $(date -u +'%F %H:%M')"
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+  deploy:
+    needs: approvals
+    if: ${{ needs.approvals.outputs.publish == 'true' || github.event_name != 'schedule' }}
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.pages.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python -m agent build
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/_build
+      - id: pages
+        uses: actions/deploy-pages@v4

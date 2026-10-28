@@ -1,0 +1,8 @@
+anthropic>=2.3,<3
+tavily-python>=0.7
+edge-tts>=7.0
+mutagen>=1.47
+pydantic>=2.7
+PyYAML>=6.0
+Markdown>=3.6
+requests>=2.32

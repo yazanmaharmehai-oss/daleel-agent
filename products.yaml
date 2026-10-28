@@ -1,0 +1,44 @@
+# قائمة المنتجات اللي بنسوّقها.
+# الإيجنت بياخد كل يوم منتج "ready" ما استخدمناه مؤخراً.
+#
+# status:
+#   ready       = في رابط عمولة وجاهز
+#   needs_link  = لسا ما سجلنا ببرنامج العمولة (الإيجنت بيكتب محتوى بس بيحذرك)
+#   paused      = موقف
+#
+# affiliate_url: الرابط اللي بتاخده من Arabclicks أو Admitad أو برنامج الشركة نفسها.
+# official_url: موقع الأداة الرسمي، منه بناخد الحقائق.
+# angle: الزاوية أو المشكلة اللي بتحلها للجمهور الخليجي (اختياري، بيساعد الكتابة)
+
+products:
+  - id: canva
+    name: "Canva Pro"
+    category: "تصميم"
+    official_url: "https://www.canva.com/pro/"
+    affiliate_url: ""
+    status: needs_link
+    angle: "تصميم بوستات ومنيو وإعلانات لمشروعك الصغير بدون مصمم"
+
+  - id: elevenlabs
+    name: "ElevenLabs"
+    category: "صوت"
+    official_url: "https://elevenlabs.io/"
+    affiliate_url: ""
+    status: needs_link
+    angle: "تعليق صوتي عربي لفيديوهاتك بدون مايك واستوديو"
+
+  - id: notion
+    name: "Notion"
+    category: "تنظيم"
+    official_url: "https://www.notion.com/"
+    affiliate_url: ""
+    status: needs_link
+    angle: "تنظيم شغلك ومشاريعك بمكان واحد مع مساعد ذكي"
+
+  - id: grammarly
+    name: "Grammarly"
+    category: "كتابة بالإنكليزي"
+    official_url: "https://www.grammarly.com/"
+    affiliate_url: ""
+    status: needs_link
+    angle: "إيميلات وسيرة ذاتية بالإنكليزي بدون أخطاء للي بشتغل بشركات الخليج"
