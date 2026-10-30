@@ -25,12 +25,17 @@ jobs:
     outputs:
       publish: ${{ steps.tg.outputs.publish }}
     env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       PINTEREST_TOKEN: ${{ secrets.PINTEREST_TOKEN }}
       GH_TOKEN: ${{ github.token }}
     steps:
+      # always the newest state: a queued run must see what the previous run pushed
       - uses: actions/checkout@v4
+        with:
+          ref: main
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"

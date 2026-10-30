@@ -21,6 +21,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: daleel-state
@@ -29,14 +30,19 @@ concurrency:
 jobs:
   draft:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 180
     env:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      GH_TOKEN: ${{ github.token }}
     steps:
+      # always the newest state: a queued run must see what the previous run pushed
       - uses: actions/checkout@v4
+        with:
+          ref: main
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -49,7 +55,8 @@ jobs:
           cache-dependency-path: video/package-lock.json
       - run: npm ci
         working-directory: video
-      - name: Make today's draft
+      - name: Make today's draft and wait for approval
+        id: make
         run: |
           args=()
           [ -n "$PRODUCT" ] && args+=(--product "$PRODUCT")
@@ -62,10 +69,12 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run }}
           FEEDBACK: ${{ inputs.feedback }}
       - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
         with:
           name: video
           path: drafts/*/media/video.mp4
           retention-days: 7
+          if-no-files-found: ignore
       - name: Save state
         if: ${{ inputs.dry_run != true }}
         run: |
@@ -76,3 +85,6 @@ jobs:
           git commit -m "draft: $(date -u +%F)"
           git pull --rebase origin main
           git push origin HEAD:main
+      - name: Publish the site now if approved
+        if: ${{ steps.make.outputs.publish == 'true' }}
+        run: gh workflow run approvals.yml

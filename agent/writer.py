@@ -5,6 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from . import llm
 from .core import env, log, skill_text
 
 
@@ -17,7 +18,8 @@ class Hook(BaseModel):
 class Scene(BaseModel):
     kind: Literal["hook", "problem", "before_after", "feature", "offer", "cta"]
     title: str = Field(description="On-screen text, 3-7 words. Wrap ONE key word in [[ ]] to highlight it.")
-    voice: str = Field(description="Spoken line, white Gulf-friendly dialect, max ~14 words")
+    voice: str = Field(description="Spoken line for the TTS voice, simple Arabic close to fusha, Arabic letters only "
+                       "(brand names spelled in Arabic letters), numbers as words, max ~14 words")
     before: str = Field(description="before_after only: what a normal person writes/does. Else empty")
     after: str = Field(description="before_after only: the result with the product. Else empty")
     bullets: list[str] = Field(description="feature/offer: up to 3 very short items. Else empty")
@@ -71,6 +73,15 @@ SYSTEM = """أنت كاتب محتوى وخبير تسويق بالعمولة ل
 - كل فيديو وكابشن فيهم #إعلان وذكر إنه رابط عمولة.
 - الجمهور مش تقني: كلام بسيط، أمثلة من شغل الناس اليومي بالخليج.
 
+## جمل الصوت (حقل voice)
+محرك الصوت متدرّب على الفصحى، فإذا كتبنا لهجة أو كلمات إنكليزية بيطلع الكلام مش مفهوم. لهيك:
+- اكتب جمل voice بعربي بسيط قريب من الفصحى، مفهوم لكل العرب (مثال: "هل ما زلت تدفع لمصمم على كل منشور؟").
+- أسماء المنتجات والكلمات الإنكليزية بحروف عربية: "كانفا برو"، "إيليفن لابز".
+- الأرقام بالكلمات: "عشرين دولار".
+- بدون رموز ولا أقواس ولا [تأكد]. إذا معلومة ناقصة، ما تذكرها بالصوت.
+- جمل قصيرة، فكرة وحدة بكل جملة.
+النص على الشاشة (title) بيضل بالأسلوب العامي الأبيض القصير.
+
 ## نظام الهوكات والسكربت
 {hooks}
 
@@ -79,9 +90,7 @@ SYSTEM = """أنت كاتب محتوى وخبير تسويق بالعمولة ل
 """
 
 
-def write_draft(product: dict, research: dict, cfg: dict, feedback: str = "", recent_hooks: list[str] | None = None) -> dict:
-    import anthropic
-
+def build_prompt(product: dict, research: dict, cfg: dict, feedback: str = "", recent_hooks: list[str] | None = None) -> tuple[str, str]:
     system = SYSTEM.format(
         brand=cfg["brand"]["name"], handle=cfg["brand"]["handle"],
         hooks=skill_text("arabic-short-video-hooks"), post=skill_text("affiliate-post-pack"),
@@ -99,13 +108,29 @@ def write_draft(product: dict, research: dict, cfg: dict, feedback: str = "", re
         user += ["", "## هوكات استعملناها مؤخراً، لا تكررها", *recent_hooks]
     if feedback:
         user += ["", "## ملاحظات صاحب الصفحة على النسخة السابقة، طبّقها", feedback]
+    return system, "\n".join(user)
+
+
+def write_draft(product: dict, research: dict, cfg: dict, feedback: str = "", recent_hooks: list[str] | None = None) -> dict:
+    system, user = build_prompt(product, research, cfg, feedback, recent_hooks)
+    provider = llm.provider(cfg)
+    if provider == "claude":
+        out = _claude(system, user, cfg)
+    else:
+        out = llm.gemini_json(system, user, Draft, cfg)
+    out["provider"] = provider
+    return out
+
+
+def _claude(system: str, user: str, cfg: dict) -> dict:
+    import anthropic
 
     client = anthropic.Anthropic(api_key=env("ANTHROPIC_API_KEY"))
     resp = client.messages.parse(
-        model=cfg["ai"]["model"],
+        model=cfg["ai"]["claude_model"],
         max_tokens=cfg["ai"].get("max_tokens", 16000),
         system=system,
-        messages=[{"role": "user", "content": "\n".join(user)}],
+        messages=[{"role": "user", "content": user}],
         output_format=Draft,
     )
     if resp.stop_reason == "refusal":
@@ -129,13 +154,13 @@ def sample_draft(product: dict) -> dict:
             {"archetype": "نداء للجمهور", "text": "إذا عندك مشروع صغير بالخليج، شوف هاد", "best": False},
         ],
         "scenes": [
-            {"kind": "hook", "title": "لسا بتدفع [[لمصمم]] على كل بوست؟", "voice": "لسا بتدفع لمصمم على كل بوست لمشروعك؟", "before": "", "after": "", "bullets": []},
-            {"kind": "problem", "title": "كل بوست [[يومين]] انتظار", "voice": "وكل تعديل صغير بياخد يومين، وبتدفع عليه كمان.", "before": "", "after": "", "bullets": []},
-            {"kind": "before_after", "title": f"مع [[{name}]] بتخلص بدقايق", "voice": "اختار قالب، غيّر الكلام والألوان، وخلصت.", "before": "صورة منتج على خلفية عادية", "after": "إعلان جاهز بشعارك وألوانك", "bullets": []},
-            {"kind": "feature", "title": "قوالب [[جاهزة]] لكل مناسبة", "voice": "في قوالب لرمضان والعيد والعروض، بس بتعدّل عليها.", "before": "", "after": "", "bullets": ["رمضان", "العيد", "العروض"]},
-            {"kind": "feature", "title": "شيل الخلفية [[بكبسة]]", "voice": "وبتشيل خلفية الصورة بكبسة وحدة.", "before": "", "after": "", "bullets": []},
-            {"kind": "offer", "title": "في نسخة [[مجانية]]", "voice": "في نسخة مجانية تبلش فيها، والمدفوعة [تأكد] بالشهر.", "before": "", "after": "", "bullets": ["مجاني للبداية", "المدفوع: [تأكد]"]},
-            {"kind": "cta", "title": "الرابط [[بالبايو]]", "voice": "الرابط بالبايو، واحفظ الفيديو لصاحبك اللي عنده مشروع.", "before": "", "after": "", "bullets": []},
+            {"kind": "hook", "title": "لسا بتدفع [[لمصمم]] على كل بوست؟", "voice": "هل ما زلت تدفع لمصمم على كل منشور لمشروعك؟", "before": "", "after": "", "bullets": []},
+            {"kind": "problem", "title": "كل بوست [[يومين]] انتظار", "voice": "وكل تعديل صغير يأخذ يومين، وتدفع عليه أيضا.", "before": "", "after": "", "bullets": []},
+            {"kind": "before_after", "title": f"مع [[{name}]] بتخلص بدقايق", "voice": "مع كانفا برو، تختار قالبا، وتغير الكلام والألوان، وانتهى.", "before": "صورة منتج على خلفية عادية", "after": "إعلان جاهز بشعارك وألوانك", "bullets": []},
+            {"kind": "feature", "title": "قوالب [[جاهزة]] لكل مناسبة", "voice": "هناك قوالب جاهزة لرمضان والعيد والعروض.", "before": "", "after": "", "bullets": ["رمضان", "العيد", "العروض"]},
+            {"kind": "feature", "title": "شيل الخلفية [[بكبسة]]", "voice": "وتزيل خلفية الصورة بضغطة واحدة.", "before": "", "after": "", "bullets": []},
+            {"kind": "offer", "title": "في نسخة [[مجانية]]", "voice": "وهناك نسخة مجانية تبدأ بها.", "before": "", "after": "", "bullets": ["مجاني للبداية", "المدفوع: [تأكد]"]},
+            {"kind": "cta", "title": "الرابط [[بالبايو]]", "voice": "الرابط في البايو، واحفظ الفيديو لصديقك صاحب المشروع.", "before": "", "after": "", "bullets": []},
         ],
         "article": {
             "title": f"{name}: كيف تصمم بوستات مشروعك بنفسك بدون مصمم",

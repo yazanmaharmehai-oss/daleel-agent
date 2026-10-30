@@ -6,8 +6,9 @@ import datetime as dt
 import os
 import subprocess
 import sys
+import time
 
-from . import pinterest, research, site, telegram, video, voice, writer
+from . import llm, pinterest, research, site, telegram, video, voice, writer
 from .core import (CONTENT_DIR, STATE, all_drafts, draft_dir, env, load_config, load_draft, load_products, log,
                    now, read_json, save_draft, setup_logging, write_json)
 
@@ -60,6 +61,14 @@ def daily(args, cfg: dict) -> None:
         draft_id = f"{now():%Y-%m-%d}-{product['id']}"
     log.info("product: %s  draft: %s", product["name"], draft_id)
 
+    if not args.dry_run and not llm.has_key(cfg):
+        msg = ("⚠️ ما قدرت أجهز مسودة اليوم: ما في مفتاح ذكاء اصطناعي.\n"
+               "روح على aistudio.google.com واعمل مفتاح مجاني، وحطه بـ GitHub باسم GEMINI_API_KEY "
+               "(Settings ← Secrets and variables ← Actions).")
+        telegram.send(msg)
+        log.error(msg)
+        sys.exit(0 if telegram.enabled() else 1)
+
     if args.dry_run:
         notes = {"notes": "", "sources": []}
         content = writer.sample_draft(product)
@@ -83,6 +92,13 @@ def daily(args, cfg: dict) -> None:
     ask_approval(draft, mp4)
     if args.auto_approve:
         approve(draft, cfg)
+    elif not args.dry_run:
+        # GitHub runs the scheduled approvals job hours late, so wait here for the buttons
+        listen(cfg, cfg["schedule"].get("approval_wait_minutes", 0), draft_id)
+
+
+def cfg_voice_engine() -> str:
+    return load_config().get("voice", {}).get("engine", "edge")
 
 
 def ask_approval(draft: dict, mp4) -> None:
@@ -92,6 +108,8 @@ def ask_approval(draft: dict, mp4) -> None:
         warn.append("⚠️ ما في رابط عمولة لهالمنتج لسا. الزر رح يودي على الموقع الرسمي بدون عمولة. سجّل بالبرنامج وحط الرابط بـ products.yaml")
     if not draft.get("voiced"):
         warn.append("⚠️ الفيديو بدون صوت (خدمة الصوت ما اشتغلت هالمرة)")
+    elif draft["voiced"] == "edge" and cfg_voice_engine() == "gemini":
+        warn.append("ℹ️ صوت جوجل ما اشتغل، استعملت الصوت الاحتياطي")
     if draft.get("missing_facts"):
         warn.append("تأكد من: " + "، ".join(draft["missing_facts"]))
     caption = f"{post['caption']}\n\n{' '.join(post['hashtags'])}"
@@ -148,10 +166,37 @@ def regenerate(draft_id: str, feedback: str) -> None:
         subprocess.run([sys.executable, "-m", "agent", "daily", "--draft-id", draft_id, "--feedback", feedback], check=True)
 
 
+def _output_publish(published: bool) -> None:
+    out = os.environ.get("GITHUB_OUTPUT")
+    if out:
+        with open(out, "a") as f:
+            f.write(f"publish={'true' if published else 'false'}\n")
+
+
 def approvals(args, cfg: dict) -> None:
+    _output_publish(process_updates(cfg))
+
+
+def listen(cfg: dict, minutes: int, draft_id: str) -> None:
+    """Handle button presses as they come, until this draft is decided or time runs out.
+    Stops right after an edit request so the re-write run (same concurrency group) can start."""
+    if not telegram.enabled() or minutes <= 0:
+        return
+    deadline = time.time() + minutes * 60
+    published = False
+    log.info("waiting up to %s min for approval", minutes)
+    while time.time() < deadline:
+        published |= process_updates(cfg, wait=25)
+        waiting_edit = draft_id in read_json(PENDING_EDITS, {}).values()
+        if load_draft(draft_id)["status"] != "pending" and not waiting_edit:
+            break
+    _output_publish(published)
+
+
+def process_updates(cfg: dict, wait: int = 0) -> bool:
     published = False
     pending = read_json(PENDING_EDITS, {})
-    for u in telegram.updates():
+    for u in telegram.updates(wait):
         cb = u.get("callback_query")
         if cb:
             action, _, draft_id = (cb.get("data") or "").partition(":")
@@ -196,11 +241,7 @@ def approvals(args, cfg: dict) -> None:
         elif text.startswith("/status"):
             telegram.send(status_text())
     write_json(PENDING_EDITS, pending)
-
-    out = os.environ.get("GITHUB_OUTPUT")
-    if out:
-        with open(out, "a") as f:
-            f.write(f"publish={'true' if published else 'false'}\n")
+    return published
 
 
 def status_text() -> str:
@@ -233,29 +274,56 @@ def weekly(args, cfg: dict) -> None:
         lines.append("• منتجات بدون رابط عمولة: " + "، ".join(no_link))
     telegram.send("\n".join(lines))
 
-    if args.dry_run or not env("ANTHROPIC_API_KEY"):
+    if args.dry_run or not llm.has_key(cfg):
         return
     found = research.discover_products(cfg, [p["name"] for p in products])
     if not found:
         return
-    import anthropic
-    client = anthropic.Anthropic(api_key=env("ANTHROPIC_API_KEY"))
-    resp = client.messages.create(
-        model=cfg["ai"]["model"], max_tokens=4000,
-        messages=[{"role": "user", "content": (
-            "من نتائج البحث التالية، اقترح 3 أدوات رقمية جديدة إلها برنامج عمولة ممكن ننشر عنها لجمهور الخليج. "
-            "لكل وحدة: الاسم، ليش بتنفع للجمهور، نوع العمولة كما هو مذكور بالمصدر (أو 'غير واضح')، ورابط المصدر. "
-            "بالعربي البسيط، بدون مبالغة، ولا تخترع نسب.\n\n" + found)}],
-    )
-    text = next((b.text for b in resp.content if b.type == "text"), "")
+    text = llm.ask_text(
+        "من نتائج البحث التالية، اقترح 3 أدوات رقمية جديدة إلها برنامج عمولة ممكن ننشر عنها لجمهور الخليج. "
+        "لكل وحدة: الاسم، ليش بتنفع للجمهور، نوع العمولة كما هو مذكور بالمصدر (أو 'غير واضح')، ورابط المصدر. "
+        "بالعربي البسيط، بدون مبالغة، ولا تخترع نسب.\n\n" + found, cfg)
     if text:
         telegram.send("💡 اقتراحات منتجات جديدة:\n\n" + text)
+
+
+# --- voice samples --------------------------------------------------------------------
+
+SAMPLE_TEXT = "هل ما زلت تدفع لمصمم على كل منشور؟ مع كانفا برو، تختار قالبا جاهزا وتغير الكلام والألوان خلال دقائق."
+EDGE_VOICES = ["ar-SA-HamedNeural", "ar-SA-ZariyahNeural", "ar-AE-HamdanNeural", "ar-JO-TaimNeural", "ar-EG-ShakirNeural"]
+GEMINI_VOICES = ["Charon", "Kore", "Puck", "Orus"]
+
+
+def voices(args, cfg: dict) -> None:
+    """Same sentence in several voices, so the owner can pick by ear."""
+    out = STATE.parent / "samples"
+    out.mkdir(exist_ok=True)
+    vc = cfg["voice"]
+    made = []
+    for v in EDGE_VOICES:
+        path = out / f"edge-{v}.mp3"
+        try:
+            voice.edge_say(SAMPLE_TEXT, path, v, vc.get("rate", "-5%"))
+            made.append((path, f"Edge: {v}"))
+        except Exception as e:  # noqa: BLE001
+            log.warning("edge %s: %s", v, e)
+    if env("GEMINI_API_KEY"):
+        for v in GEMINI_VOICES:
+            path = out / f"gemini-{v}.wav"
+            try:
+                voice.gemini_say(SAMPLE_TEXT, path, {**vc, "gemini_voice": v})
+                made.append((path, f"Google: {v}"))
+            except Exception as e:  # noqa: BLE001
+                log.warning("gemini %s: %s", v, e)
+    log.info("samples: %s", [str(p) for p, _ in made])
+    for path, label in made:
+        telegram.send_audio(path, label)
 
 
 def main() -> None:
     setup_logging()
     ap = argparse.ArgumentParser(prog="agent")
-    ap.add_argument("command", choices=["daily", "approvals", "build", "weekly"])
+    ap.add_argument("command", choices=["daily", "approvals", "build", "weekly", "voices"])
     ap.add_argument("--product", default="")
     ap.add_argument("--draft-id", default="")
     ap.add_argument("--feedback", default="")
@@ -272,3 +340,5 @@ def main() -> None:
         log.info("site built: %s", out)
     elif args.command == "weekly":
         weekly(args, cfg)
+    elif args.command == "voices":
+        voices(args, cfg)

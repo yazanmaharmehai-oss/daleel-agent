@@ -1,6 +1,7 @@
 """Telegram bot: sends each draft for approval and reads the buttons the person pressed."""
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import requests
@@ -17,7 +18,7 @@ def enabled() -> bool:
 
 def _call(method: str, files=None, **params):
     r = requests.post(API.format(token=env("TELEGRAM_BOT_TOKEN"), method=method), data=params if files else None,
-                      json=None if files else params, files=files, timeout=120)
+                      json=None if files else params, files=files, timeout=params.get("timeout", 0) + 120)
     data = r.json()
     if not data.get("ok"):
         raise RuntimeError(f"telegram {method}: {data.get('description')}")
@@ -64,12 +65,22 @@ def answer(callback_id: str, text: str = "") -> None:
         log.info("answerCallbackQuery: %s", e)
 
 
-def updates() -> list[dict]:
-    """New button presses and replies from the owner chat only. Advances the stored offset."""
+def send_audio(path: Path, title: str) -> None:
     if not enabled():
+        return
+    with path.open("rb") as f:
+        _call("sendAudio", files={"audio": (path.name, f)}, chat_id=env("TELEGRAM_CHAT_ID"), title=title, caption=title)
+
+
+def updates(wait: int = 0) -> list[dict]:
+    """New button presses and replies from the owner chat only. Advances the stored offset.
+    wait > 0 long-polls: Telegram holds the request until something arrives or the time is up."""
+    if not enabled():
+        if wait:
+            time.sleep(wait)
         return []
     state = read_json(OFFSET_FILE, {"offset": 0})
-    res = _call("getUpdates", offset=state["offset"], timeout=0, allowed_updates=["message", "callback_query"])
+    res = _call("getUpdates", offset=state["offset"], timeout=wait, allowed_updates=["message", "callback_query"])
     owner = str(env("TELEGRAM_CHAT_ID"))
     out = []
     for u in res:

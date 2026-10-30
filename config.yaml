@@ -9,7 +9,11 @@ brand:
 markets: ["السعودية", "الإمارات", "الكويت", "قطر", "الأردن"]
 
 ai:
-  model: "claude-opus-5-5"
+  # auto = Claude إذا في مفتاح ANTHROPIC_API_KEY، وإلا Gemini المجاني
+  provider: "auto"
+  # أسماء نماذج Gemini المجانية بتتغير. الإيجنت بيجرب بالترتيب لحد ما واحد يشتغل.
+  gemini_models: ["gemini-flash-latest", "gemini-3.8-flash", "gemini-3-flash-preview", "gemini-2.5-flash"]
+  claude_model: "claude-opus-5-5"
   max_tokens: 16000
 
 research:
@@ -20,9 +24,15 @@ research:
 
 voice:
   enabled: true
-  # أصوات Edge TTS العربية: ar-SA-HamedNeural, ar-SA-ZariyahNeural, ar-AE-HamdanNeural, ar-JO-TaimNeural, ar-JO-SanaNeural
+  # gemini = صوت جوجل (أوضح، بدو GEMINI_API_KEY). edge = صوت مايكروسوفت المجاني بدون مفتاح.
+  # إذا صوت جوجل ما اشتغل، الإيجنت بيرجع لـ edge لحاله.
+  engine: "gemini"
+  gemini_voice: "Charon"
+  gemini_style: "اقرأ النص التالي بالعربية بصوت واضح وهادئ وسرعة متوسطة، كأنك تشرح لصديق"
+  gemini_models: ["gemini-3.1-flash-tts-preview", "gemini-2.5-flash-preview-tts"]
+  # أصوات Edge العربية: ar-SA-HamedNeural, ar-SA-ZariyahNeural, ar-AE-HamdanNeural, ar-JO-TaimNeural, ar-JO-SanaNeural
   name: "ar-SA-HamedNeural"
-  rate: "+8%"
+  rate: "-5%"
 
 video:
   fps: 30
@@ -32,6 +42,8 @@ video:
 schedule:
   # كم يوم لازم يمر قبل ما نرجع لنفس المنتج
   product_cooldown_days: 21
+  # بعد ما توصلك المسودة، الإيجنت بيضل يستنى ردك هالمدة (دقايق) عشان ينفذ فوراً
+  approval_wait_minutes: 120
 
 pinterest:
   enabled: false
