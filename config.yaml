@@ -26,12 +26,12 @@ voice:
   enabled: true
   # gemini = صوت جوجل (أوضح، بدو GEMINI_API_KEY). edge = صوت مايكروسوفت المجاني بدون مفتاح.
   # إذا صوت جوجل ما اشتغل، الإيجنت بيرجع لـ edge لحاله.
-  engine: "gemini"
+  engine: "edge"
   gemini_voice: "Charon"
   gemini_style: "اقرأ النص التالي بالعربية بصوت واضح وهادئ وسرعة متوسطة، كأنك تشرح لصديق"
   gemini_models: ["gemini-3.1-flash-tts-preview", "gemini-2.5-flash-preview-tts"]
-  # أصوات Edge العربية: ar-SA-HamedNeural, ar-SA-ZariyahNeural, ar-AE-HamdanNeural, ar-JO-TaimNeural, ar-JO-SanaNeural
-  name: "ar-SA-HamedNeural"
+  # يزن اختار ar-EG-ShakirNeural (2026-10-30). أصوات Edge العربية: ar-SA-HamedNeural, ar-SA-ZariyahNeural, ar-AE-HamdanNeural, ar-JO-TaimNeural, ar-JO-SanaNeural
+  name: "ar-EG-ShakirNeural"
   rate: "-5%"
 
 video:
