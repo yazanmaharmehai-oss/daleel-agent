@@ -82,8 +82,12 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
       - run: python -m agent build
+      # a unique name per attempt, so "Re-run" doesn't find two artifacts with the same name
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site/_build
+          name: github-pages-${{ github.run_attempt }}
       - id: pages
         uses: actions/deploy-pages@v4
+        with:
+          artifact_name: github-pages-${{ github.run_attempt }}
