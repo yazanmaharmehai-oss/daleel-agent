@@ -7,7 +7,7 @@ Affiliate-marketing agent for an Arabic brand page ("دليل الذكي", @dale
 - `python -m agent approvals`: reads Telegram updates (owner chat only), approve → `site/content/<slug>.json`; edit → re-dispatches daily.yml with feedback.
 - `python -m agent build`: static RTL site in `site/_build` (GitHub Pages via approvals.yml).
 - State is committed to git (`state/`, `drafts/*/draft.json`, `site/content/`). Media (`drafts/*/media/`) is not; videos reach the owner via Telegram and Actions artifacts.
-- All workflows share concurrency group `daleel-state` so state commits never race.
+- daily.yml and approvals.yml have separate concurrency groups; approvals skips while a daily run is in progress (the daily job reads Telegram itself while waiting). State pushes use `git pull --rebase`.
 
 ## Rules
 - Prompts load `.claude/skills/arabic-short-video-hooks` and `affiliate-post-pack` at runtime: edit the skills, not copies in code.

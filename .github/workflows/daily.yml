@@ -24,7 +24,7 @@ permissions:
   actions: write
 
 concurrency:
-  group: daleel-state
+  group: daleel-daily
   cancel-in-progress: false
 
 jobs:

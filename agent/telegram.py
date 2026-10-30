@@ -80,7 +80,13 @@ def updates(wait: int = 0) -> list[dict]:
             time.sleep(wait)
         return []
     state = read_json(OFFSET_FILE, {"offset": 0})
-    res = _call("getUpdates", offset=state["offset"], timeout=wait, allowed_updates=["message", "callback_query"])
+    try:
+        res = _call("getUpdates", offset=state["offset"], timeout=wait, allowed_updates=["message", "callback_query"])
+    except (RuntimeError, requests.RequestException) as e:
+        # "Conflict" means another run is reading at the same moment; network blips happen too
+        log.warning("getUpdates: %s", e)
+        time.sleep(max(wait, 5))
+        return []
     owner = str(env("TELEGRAM_CHAT_ID"))
     out = []
     for u in res:
